@@ -1,0 +1,154 @@
+apply plugin: 'com.android.application'
+
+android {
+    compileSdkVersion 30
+    defaultConfig {
+        applicationId "net.dinglisch.android.appfactory"
+        minSdkVersion 21
+        //noinspection OldTargetApi
+        targetSdkVersion 30
+        versionCode 1
+        versionName "1.0"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+
+        ndk {
+            abiFilters 'x86', 'x86_64', 'armeabi-v7a', 'arm64-v8a'
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility 1.8
+        targetCompatibility 1.8
+    }
+
+    packagingOptions {
+        jniLibs {
+            useLegacyPackaging true
+        }
+    }
+
+    sourceSets {
+        main {
+            jniLibs.srcDirs = ["src/main/bootstrapLibs"]
+        }
+    }
+}
+
+dependencies {
+    testImplementation 'junit:junit:4.13.2'
+    androidTestImplementation 'androidx.test:runner:1.4.0'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.4.0'
+
+    implementation fileTree(dir: 'libs', include: ['*.jar'])
+
+    implementation "androidx.annotation:annotation:1.3.0"
+    implementation "androidx.appcompat:appcompat:1.3.1"
+    implementation "androidx.core:core:1.6.0"
+    implementation "com.google.guava:guava:24.1-jre"
+
+    // Required for FileUtils
+    // Do not increment version higher than 2.5 or there
+    // will be runtime exceptions on android < 8
+    // due to missing classes like java.nio.file.Path.
+    implementation "commons-io:commons-io:2.5"
+}
+
+def expandBootstrap(File bootstrapZip, String expectedChecksum, String arch) {
+    def doneMarkerFile = new File(bootstrapZip.getAbsolutePath() + "." + expectedChecksum + ".done")
+    if (doneMarkerFile.exists()) return
+
+    def archDirName
+    if (arch == "aarch64") archDirName = "arm64-v8a";
+    if (arch == "arm") archDirName = "armeabi-v7a";
+    if (arch == "i686") archDirName = "x86";
+    if (arch == "x86_64") archDirName = "x86_64";
+
+    def outputPath = project.getRootDir().getAbsolutePath() + "/app/src/main/bootstrapLibs/" + archDirName + "/"
+    def outputDir = new File(outputPath).getAbsoluteFile()
+    if (!outputDir.exists()) outputDir.mkdirs()
+
+    def symlinksFile = new File(outputDir, "libsymlinks.so").getAbsoluteFile()
+    if (symlinksFile.exists()) symlinksFile.delete();
+
+    def mappingsFile = new File(outputDir, "libfiles.so").getAbsoluteFile()
+    if (mappingsFile.exists()) mappingsFile.delete()
+    mappingsFile.createNewFile()
+    def mappingsFileWriter = new BufferedWriter(new FileWriter(mappingsFile))
+
+    def counter = 100
+    new java.util.zip.ZipInputStream(new FileInputStream(bootstrapZip)).withCloseable { zipInput ->
+        def zipEntry
+        while ((zipEntry = zipInput.getNextEntry()) != null) {
+            if (zipEntry.getName() == "SYMLINKS.txt") {
+                zipInput.transferTo(new FileOutputStream(symlinksFile))
+            } else if (!zipEntry.isDirectory()) {
+                def soName = "lib" + counter + ".so"
+                def targetFile = new File(outputDir, soName).getAbsoluteFile()
+
+                println "target file path is ${targetFile}"
+
+                try {
+                    zipInput.transferTo(new FileOutputStream(targetFile))
+                } catch (Exception e) {
+                    println "Error ${e}"
+                }
+
+                mappingsFileWriter.writeLine(soName + "←" + zipEntry.getName())
+                counter++
+            }
+        }
+    }
+
+    mappingsFileWriter.close()
+    doneMarkerFile.createNewFile()
+}
+
+def setupBootstraps(String arch) {
+    def digest = java.security.MessageDigest.getInstance("SHA-256")
+
+    def file = new File(projectDir, "src/main/bootstrapZips/bootstrap-" + arch + ".zip");
+    if (file.exists()) {
+        def buffer = new byte[8192]
+        def input = new FileInputStream(file)
+        while (true) {
+            def readBytes = input.read(buffer)
+            if (readBytes < 0) break
+            digest.update(buffer, 0, readBytes)
+        }
+        def checksum = new BigInteger(1, digest.digest()).toString(16)
+        expandBootstrap(file, checksum, arch)
+    } else {
+        throw new GradleException("Failed to find " + arch + " bootstrap at \"" + file.getAbsolutePath() + "\"")
+    }
+}
+
+clean {
+    doLast {
+        def tree = fileTree(new File(projectDir, 'src/main'))
+        //tree.include 'bootstrapZips/bootstrap-*.zip'
+        tree.include 'bootstrapZips/bootstrap-*.zip.*.done'
+        tree.include 'bootstrapLibs/*/*'
+        tree.each { it.delete() }
+    }
+}
+
+task setupBootstraps() {
+    doLast {
+        setupBootstraps("aarch64")
+        setupBootstraps("arm")
+        setupBootstraps("i686")
+        setupBootstraps("x86_64")
+    }
+}
+
+afterEvaluate {
+    android.applicationVariants.all { variant ->
+        variant.javaCompileProvider.get().dependsOn(setupBootstraps)
+    }
+}
