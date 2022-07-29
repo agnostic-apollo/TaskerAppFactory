@@ -24,16 +24,14 @@ public class AppFactoryConstants {
     /** Termux app $PREFIX directory path */
     public static String PREFIX_DIR_PATH; // Default: "/data/data/net.dinglisch.android.appfactory/files/usr"
 
-
     /** Termux app $PREFIX/bin directory path */
     public static String BIN_PREFIX_DIR_PATH; // Default: "/data/data/net.dinglisch.android.appfactory/files/usr/bin"
 
-
+    /** Termux app $PREFIX/lib directory path */
+    public static String LIB_PREFIX_DIR_PATH; // Default: "/data/data/net.dinglisch.android.appfactory/files/usr/lib"
 
     /** Termux app $PREFIX/tmp and $TMPDIR directory path */
     public static String TMP_PREFIX_DIR_PATH; // Default: "/data/data/net.dinglisch.android.appfactory/files/usr/tmp"
-
-
 
     /** Termux app $HOME directory path */
     public static String HOME_DIR_PATH; // Default: "/data/data/net.dinglisch.android.appfactory/files/home"
@@ -45,6 +43,7 @@ public class AppFactoryConstants {
 
         PREFIX_DIR_PATH = FILES_DIR_PATH + "/usr";
         BIN_PREFIX_DIR_PATH = PREFIX_DIR_PATH + "/bin";
+        LIB_PREFIX_DIR_PATH = PREFIX_DIR_PATH + "/lib";
         TMP_PREFIX_DIR_PATH = PREFIX_DIR_PATH + "/tmp";
 
         HOME_DIR_PATH = FILES_DIR_PATH + "/home";

@@ -2,10 +2,12 @@ package net.dinglisch.android.appfactory.utils.shell.environment;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.os.Build;
 
 import androidx.annotation.NonNull;
 
 import net.dinglisch.android.appfactory.AppFactoryConstants;
+import net.dinglisch.android.appfactory.utils.android.PackageUtils;
 
 import java.util.HashMap;
 
@@ -38,9 +40,16 @@ public class AppShellEnvironment extends AndroidShellEnvironment {
         // If failsafe is not enabled, then we keep default PATH and TMPDIR so that system binaries can be used
         if (!isFailSafe) {
             environment.put(ENV_TMPDIR, AppFactoryConstants.TMP_PREFIX_DIR_PATH);
-            // App binaries on Android 7+ rely on DT_RUNPATH, so LD_LIBRARY_PATH should be unset by default
             environment.put(ENV_PATH, AppFactoryConstants.BIN_PREFIX_DIR_PATH);
-            environment.remove(ENV_LD_LIBRARY_PATH);
+
+            // App binaries on Android 7+ rely on DT_RUNPATH, so LD_LIBRARY_PATH should be unset by default
+            // Secondary user will have different prefix than /data/data/<package_name>/files/usr
+            // and so requires LD_LIBRARY_PATH, otherwise will get "CANNOT LINK EXECUTABLE... library not found" errors
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N || !PackageUtils.isCurrentUserThePrimaryUser(mCurrentPackageContext)) {
+                environment.put(ENV_LD_LIBRARY_PATH, AppFactoryConstants.LIB_PREFIX_DIR_PATH);
+            } else {
+                environment.remove(ENV_LD_LIBRARY_PATH);
+            }
         }
 
         return environment;
